@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Exemplo WebSocket</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: Arial, sans-serif;
+      }
+      #o {
+        margin-bottom: 20px;
+        border: 1px solid #ccc;
+        padding: 10px;
+        max-height: 200px;
+        overflow-y: auto;
+        background: #f1f1f1;
+        border-radius: 8px;
+        min-height: 80px;
+        max-height: 550px;
+      }
+      .login {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        flex-direction: column;
+        gap: 2rem;
+        border: solid #909090 1px;
+        background: #e3e0e0;
+        padding: 2rem;
+        border-radius: 20px;
+      }
+      .login > input {
+        width: 100%;
+        height: 45px;
+        border: 1px solid #404040;
+        outline: none;
+        border-radius: 16px;
+        transition: 0.2s;
+        padding-left: 20px;
+        scale: 1;
+      }
+      .login > input:focus {
+        transition: 0.2s;
+        transform: scale(1.05); /* Slightly enlarge the input */
+        border: rgb(231, 161, 30) solid 2px;
+      }
+
+      main {
+        display: flex;
+        align-items: center;
+        gap: 2rem;
+        padding: 2rem;
+        width: 100%;
+      }
+      .sendButton {
+        padding: 0.5rem 1rem;
+        color: #f1f1f1;
+        font-weight: 700;
+        text-transform: uppercase;
+        border-radius: 6px;
+        background-color: rgb(231, 161, 30);
+        border: none;
+        transition: 0.2s;
+        cursor: pointer;
+      }
+      .sendButton:hover {
+        scale: 1.1;
+        transition: 0.2s;
+      }
+      .messages {
+        border: solid #909090 1px;
+        background: #e3e0e0;
+        padding: 2rem;
+        border-radius: 20px;
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        flex-direction: column;
+        height: 500px;
+      }
+      #inputText {
+        width: 100%;
+        height: 45px;
+        border: 1px solid #404040;
+        outline: none;
+        border-radius: 16px;
+        transition: 0.2s;
+        padding-left: 20px;
+        scale: 1;
+      }
+      .send {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+      }
+      #users-list {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 2rem;
+        border: solid #909090 1px;
+        background: #e3e0e0;
+        padding: 2rem;
+        border-radius: 20px;
+        max-height: 500px;
+        overflow-y: auto;
+      }
+      .users > span {
+        font-weight: 600;
+        font-size: 20px;
+      }
+      .users > p {
+        font-weight: 700;
+        font-size: 16px;
+      }
+      .users {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .small {
+        display: flex;
+        width: 40%;
+        align-items: center;
+        justify-content: space-between;
+        gap: 2rem;
+        flex-direction: column;
+        height: 500px;
+      }
+
+      .opa {
+        width: 100%;
+        height: 45px;
+        border: 1px solid #404040;
+        outline: none;
+        border-radius: 16px;
+        transition: 0.2s;
+        padding-left: 20px;
+        scale: 1;
+      }
+      .opa:focus {
+        transition: 0.2s;
+        transform: scale(1.05); /* Slightly enlarge the input */
+        border: rgb(231, 161, 30) solid 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Chat</h1>
+    <main>
+      <div class="small">
+        <div id="users-list">
+          <input type="text" id="username" placeholder="Procurar" class="opa" />
+        </div>
+        <div class="login">
+          <input
+            type="text"
+            id="username"
+            placeholder="Nome de usuário"
+            required
+          />
+          <button id="loginButton" class="sendButton">Entrar</button>
+        </div>
+      </div>
+
+      <div class="messages">
+        <div id="o"></div>
+
+        <div style="height: 100px">
+          <div class="send">
+            <input
+              type="text"
+              id="inputText"
+              placeholder="Digite uma mensagem"
+            />
+            <button id="sendButton" class="sendButton">Enviar</button>
+          </div>
+
+          <div id="ms"></div>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      const socket = new WebSocket("ws://localhost:8080");
+      const o = document.getElementById("o");
+      const inputText = document.getElementById("inputText");
+      const sendButton = document.getElementById("sendButton");
+      const usernameInput = document.getElementById("username");
+      const loginButton = document.getElementById("loginButton");
+      const d = document.getElementById("ms");
+      let username = "";
+      const typingTimeoutDuration = 300;
+
+      let typingTimeout;
+
+      inputText.addEventListener("input", () => {
+        if (username.trim().length > 0 && inputText.value.trim().length > 0) {
+          socket.send(JSON.stringify({ action: "typing", username }));
+
+          const existingTypingMessage =
+            document.getElementById("typingMessage");
+          if (existingTypingMessage) {
+            existingTypingMessage.remove();
+          }
+
+          clearTimeout(typingTimeout);
+
+          typingTimeout = setTimeout(() => {
+            const typingMessage = document.getElementById("typingMessage");
+            if (typingMessage) {
+              typingMessage.remove();
+            }
+          }, typingTimeoutDuration);
+        }
+      });
+
+      socket.onopen = () => {
+        console.log("Conectado ao Socket");
+      };
+
+      socket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.type === "message") {
+          const text = document.createElement("p");
+          const [username, message] = data.message.split(": ", 2);
+          text.innerHTML = `<strong style="color: #0e0e0e; font-weight: bold;">${username}:</strong> <span style="color: #000; font-weight: 400;">${message}</span>`;
+          o.appendChild(text);
+        } else if (data.type === "list") {
+          const userLists = document.getElementById("users-list");
+          userLists.innerHTML = "";
+          data.cl.forEach((e) => {
+            const userCont = document.createElement("div");
+            const name = document.createElement("span");
+            name.textContent = e.user;
+            const status = document.createElement("p");
+            status.style.color = e.status === "online" ? "#0c0" : "#c00";
+            status.textContent = e.status;
+            userCont.appendChild(name);
+            userCont.appendChild(status);
+            userCont.setAttribute("class", "users");
+            userLists.appendChild(userCont);
+          });
+        } else if (data.type === "history") {
+          data.messages.forEach((message) => {
+            const text = document.createElement("p");
+            const [username, msgContent] = message.split(": ", 2);
+            text.innerHTML = `<strong style="color: #0e0e0e; font-weight: bold;">${username}:</strong> <span style="color: #000; font-weight: 400;">${msgContent}</span>`;
+            o.appendChild(text);
+          });
+        } else if (data.type === "data") {
+          const text = document.createElement("p");
+          const [username, message] = data.message.split(": ", 2);
+          text.innerHTML = `<strong style="color: #707070; font-weight: 300;">${username}</strong>`;
+          o.appendChild(text);
+        }
+        if (
+          data.message.includes("entrou no chat") ||
+          data.message.includes("saiu do chat")
+        ) {
+          const notifyText = document.createElement("p");
+          notifyText.textContent = data.message;
+          notifyText.style.color = "#505050";
+          notifyText.style.fontWeight = "300";
+          o.appendChild(notifyText);
+        }
+
+        if (data.type === "typing") {
+          const existingTypingMessage =
+            document.getElementById("typingMessage");
+          if (existingTypingMessage) {
+            existingTypingMessage.remove();
+          }
+
+          const ms = document.getElementById("ms");
+          const typingMessage = document.createElement("p");
+          typingMessage.id = "typingMessage";
+          typingMessage.textContent = data.message;
+          typingMessage.style.color = "rgb(231, 161, 30)";
+          typingMessage.style.fontWeight = "300";
+          ms.appendChild(typingMessage);
+        }
+      };
+
+      sendButton.onclick = () => {
+        if (username.trim().length > 0) {
+          const message = inputText.value;
+          if (message) {
+            const msgObject = {
+              username: username,
+              message: message,
+            };
+            socket.send(JSON.stringify(msgObject));
+            inputText.value = "";
+          }
+        } else {
+          const sentText = document.createElement("p");
+          sentText.textContent = "É necessário autenticar-se";
+          d.appendChild(sentText);
+        }
+      };
+
+      loginButton.onclick = () => {
+        username = usernameInput.value.trim();
+        if (username) {
+          socket.send(JSON.stringify({ username: username, action: "join" }));
+          usernameInput.value = "";
+          d.innerHTML = ""; // Clear any previous messages
+        } else {
+          const errorText = document.createElement("p");
+          errorText.textContent = "Por favor, insira um nome de usuário.";
+          d.appendChild(errorText);
+        }
+      };
+    </script>
+  </body>
+</html>
